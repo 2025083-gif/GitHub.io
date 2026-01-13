@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Monster Slayer: Skill Master</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; background: #1a1a2e; color: white; }
+        #game-container { background: #16213e; padding: 25px; border-radius: 15px; box-shadow: 0 0 30px rgba(0,0,0,0.5); width: 480px; text-align: center; border: 1px solid #0f3460; }
+        
+        .stage { display: flex; justify-content: space-around; align-items: flex-end; height: 130px; margin-bottom: 20px; border-bottom: 3px solid #0f3460; position: relative; background: rgba(0,0,0,0.2); border-radius: 10px 10px 0 0; }
+        .character { font-size: 60px; transition: all 0.2s; position: relative; bottom: 10px; }
+        .jump { bottom: 70px !important; }
+        .attack-anim { transform: translateX(30px); }
+
+        .stats { display: flex; justify-content: space-between; margin-bottom: 15px; }
+        .hp-bar { background: #0f3460; height: 18px; border-radius: 9px; overflow: hidden; width: 180px; border: 1px solid #e94560; }
+        .hp-fill { background: #e94560; height: 100%; width: 100%; transition: width 0.3s ease; }
+        
+        #log { height: 130px; overflow-y: auto; border: 1px solid #0f3460; padding: 12px; text-align: left; font-size: 0.85em; background: #1a1a2e; color: #ced4da; margin-bottom: 15px; }
+        
+        .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        button { padding: 12px 5px; font-size: 0.9em; cursor: pointer; background: #0f3460; border: 1px solid #e94560; color: white; border-radius: 5px; transition: 0.2s; }
+        button:hover { background: #e94560; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .btn-reset { grid-column: span 3; background: #533483; margin-top: 10px; }
+        .critical { color: #f9ed69; font-weight: bold; }
+        .heal { color: #2ed573; font-weight: bold; }
+        .recoil { color: #ff4757; }
+        .hint { font-size: 0.8em; color: #4ecca3; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Monster Slayer EX</h1>
+
+    <div id="game-container">
+        <div class="stage">
+            <div id="player-img" class="character">⚔️</div>
+            <div id="enemy-img" class="character">👹</div>
+        </div>
+
+        <div class="stats">
+            <div>
+                <strong>Player</strong> Lv.<span id="p-lv">1</span><br>
+                <div class="hp-bar"><div id="p-hp-fill" class="hp-fill"></div></div>
+                <small><span id="p-hp">100</span> / <span id="p-max-hp">100</span></small>
+            </div>
+            <div>
+                <strong>Enemy</strong> Lv.<span id="e-lv">1</span><br>
+                <div class="hp-bar"><div id="e-hp-fill" class="hp-fill"></div></div>
+                <small><span id="e-hp">50</span> / <span id="e-max-hp">50</span></small>
+            </div>
+        </div>
+
+        <div id="log">冒険の始まりだ！</div>
+        
+        <div class="controls" id="controls">
+            <button onclick="executeAction('normal')">通常攻撃</button>
+            <button onclick="executeAction('heal')">ヒール✨</button>
+            <button onclick="executeAction('heavy')">渾身の一撃🔥</button>
+            <button id="reset-btn" class="btn-reset" onclick="location.reload()" style="display:none;">もう一度挑戦</button>
+        </div>
+        <p class="hint">敵の攻撃時 [W] キーでジャンプ回避！</p>
+    </div>
+
+    <script>
+        let player = { lv: 1, hp: 100, maxHp: 100, atk: 15, isJumping: false };
+        let enemy = { lv: 1, hp: 50, maxHp: 50, atk: 12 };
+        let isProcessing = false;
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'w' && !player.isJumping) {
+                player.isJumping = true;
+                const img = document.getElementById('player-img');
+                img.classList.add('jump');
+                setTimeout(() => {
+                    img.classList.remove('jump');
+                    player.isJumping = false;
+                }, 500);
+            }
+        });
+
+        function addLog(msg, className = '') {
+            const p = document.createElement('div');
+            p.innerHTML = msg;
+            if (className) p.className = className;
+            const log = document.getElementById('log');
+            log.prepend(p);
+        }
+
+        function updateUI() {
+            document.getElementById('p-lv').innerText = player.lv;
+            document.getElementById('p-hp').innerText = Math.max(0, Math.floor(player.hp));
+            document.getElementById('p-max-hp').innerText = player.maxHp;
+            document.getElementById('p-hp-fill').style.width = (player.hp / player.maxHp * 100) + '%';
+
+            document.getElementById('e-lv').innerText = enemy.lv;
+            document.getElementById('e-hp').innerText = Math.max(0, Math.floor(enemy.hp));
+            document.getElementById('e-max-hp').innerText = enemy.maxHp;
+            document.getElementById('e-hp-fill').style.width = (enemy.hp / enemy.maxHp * 100) + '%';
+        }
+
+        async function executeAction(type) {
+            if (isProcessing) return;
+            isProcessing = true;
+            toggleButtons(true);
+
+            // プレイヤーの行動
+            const pImg = document.getElementById('player-img');
+            pImg.classList.add('attack-anim');
+            setTimeout(() => pImg.classList.remove('attack-anim'), 200);
+
+            if (type === 'normal') {
+                let crit = Math.random() < 0.2;
+                let dmg = player.atk + Math.floor(Math.random() * 5);
+                if (crit) { dmg *= 2; addLog(`🔥 クリティカル！ ${dmg}のダメージ！`, 'critical'); }
+                else { addLog(`通常攻撃！ ${dmg}のダメージ！`); }
+                enemy.hp -= dmg;
+            } 
+            else if (type === 'heal') {
+                let amount = Math.floor(player.maxHp * 0.3);
+                player.hp = Math.min(player.maxHp, player.hp + amount);
+                addLog(`✨ ヒール！ HPが ${amount} 回復した！`, 'heal');
+            } 
+            else if (type === 'heavy') {
+                let dmg = Math.floor(player.atk * 2.5);
+                let recoil = Math.floor(dmg * 0.2);
+                enemy.hp -= dmg;
+                player.hp -= recoil;
+                addLog(`🔥 渾身の一撃！ 敵に ${dmg} の大ダメージ！`);
+                addLog(`⚠️ 反動で ${recoil} のダメージを受けた！`, 'recoil');
+            }
+
+            updateUI();
+
+            if (enemy.hp <= 0) {
+                await victory();
+            } else {
+                await enemyTurn();
+            }
+        }
+
+        async function enemyTurn() {
+            addLog("敵が攻撃してくる！ [W]で避けろ！");
+            await new Promise(r => setTimeout(r, 800));
+
+            if (player.isJumping) {
+                addLog("🍃 ヒラリ！攻撃を回避した！", "heal");
+            } else {
+                let eDmg = enemy.atk + Math.floor(Math.random() * 5);
+                player.hp -= eDmg;
+                addLog(`👹 敵の攻撃！ ${eDmg} のダメージ！`);
+            }
+
+            updateUI();
+            if (player.hp <= 0) {
+                addLog(`💀 敗北した... 最終レベル: ${enemy.lv}`);
+                document.getElementById('reset-btn').style.display = 'block';
+                return;
+            }
+
+            isProcessing = false;
+            toggleButtons(false);
+        }
+
+        async function victory() {
+            addLog(`🏆 敵を撃破！ Lv.${enemy.lv + 1}になる...`, 'critical');
+            enemy.lv++;
+            enemy.maxHp = Math.floor(50 * Math.pow(1.3, enemy.lv - 1));
+            enemy.hp = enemy.maxHp;
+            enemy.atk = Math.floor(12 * Math.pow(1.2, enemy.lv - 1));
+
+            player.lv++;
+            player.maxHp += 20;
+            player.hp = player.maxHp;
+            player.atk += 5;
+
+            updateUI();
+            await new Promise(r => setTimeout(r, 1000));
+            isProcessing = false;
+            toggleButtons(false);
+        }
+
+        function toggleButtons(disabled) {
+            const btns = document.querySelectorAll('.controls button:not(.btn-reset)');
+            btns.forEach(b => b.disabled = disabled);
+        }
+
+        updateUI();
+    </script>
+</body>
+</html>
