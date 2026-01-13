@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Geometry Dash Clone</title>
+    <style>
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #000; color: white; font-family: 'Arial Black', sans-serif; overflow: hidden; }
+        #game-container { position: relative; width: 800px; height: 300px; background: #111; border-bottom: 5px solid #00ffff; box-shadow: 0 0 20px rgba(0, 255, 255, 0.2); cursor: pointer; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 10px; left: 10px; font-size: 20px; color: #00ffff; }
+        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; display: none; }
+        .btn { background: #00ffff; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="300"></canvas>
+        <div id="ui">Level: <span id="lv">1</span> | Score: <span id="score">0</span></div>
+        <div id="msg">
+            <h1 id="status-text">GAME OVER</h1>
+            <button class="btn" onclick="resetGame()">RETRY</button>
+        </div>
+    </div>
+    <div style="margin-top: 20px; color: #888;">SPACE, W, またはクリックでジャンプ！</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const lvEl = document.getElementById('lv');
+    const msgEl = document.getElementById('msg');
+
+    // ゲーム設定
+    let gameActive = true;
+    let score = 0;
+    let level = 1;
+    let speed = 5;
+    const gravity = 0.8;
+    const jumpPower = -12;
+
+    // プレイヤーオブジェクト
+    let player = {
+        x: 100,
+        y: 250,
+        size: 30,
+        vy: 0,
+        rotation: 0,
+        isGrounded: false
+    };
+
+    // 障害物
+    let obstacles = [];
+    let frameCount = 0;
+
+    // 入力イベント
+    function handleJump() {
+        if (!gameActive) return;
+        if (player.isGrounded) {
+            player.vy = jumpPower;
+            player.isGrounded = false;
+        }
+    }
+
+    window.addEventListener('keydown', (e) => { if(e.code === 'Space' || e.key === 'w' || e.key === 'W') handleJump(); });
+    canvas.addEventListener('mousedown', handleJump);
+
+    function spawnObstacle() {
+        // レベルが上がると障害物の間隔を狭くする
+        let interval = Math.max(40, 90 - (level * 5));
+        if (frameCount % interval === 0) {
+            let type = Math.random() > 0.3 ? 'spike' : 'block';
+            obstacles.push({
+                x: canvas.width,
+                y: type === 'spike' ? 270 : 230,
+                width: 30,
+                height: 30,
+                type: type
+            });
+        }
+    }
+
+    function drawPlayer() {
+        ctx.save();
+        ctx.translate(player.x + player.size/2, player.y + player.size/2);
+        
+        // ジャンプ中のみ回転させる
+        if (!player.isGrounded) {
+            player.rotation += 0.15;
+        } else {
+            // 地面にいるときは角度を0か90, 180...に補正（GD風）
+            player.rotation = Math.round(player.rotation / (Math.PI/2)) * (Math.PI/2);
+        }
+        ctx.rotate(player.rotation);
+        
+        // プレイヤーの本体
+        ctx.fillStyle = '#00ffff';
+        ctx.fillRect(-player.size/2, -player.size/2, player.size, player.size);
+        // 目（GD風の四角）
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-player.size/2 + 5, -player.size/2 + 5, 20, 20);
+        
+        ctx.restore();
+    }
+
+    function drawObstacles() {
+        obstacles.forEach((obs, index) => {
+            obs.x -= speed;
+            
+            if (obs.type === 'spike') {
+                // トゲの描画
+                ctx.fillStyle = '#ff0055';
+                ctx.beginPath();
+                ctx.moveTo(obs.x, 300);
+                ctx.lineTo(obs.x + 15, 270);
+                ctx.lineTo(obs.x + 30, 300);
+                ctx.fill();
+            } else {
+                // ブロックの描画
+                ctx.fillStyle = '#eee';
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+            }
+
+            // 衝突判定
+            if (
+                player.x < obs.x + obs.width - 5 &&
+                player.x + player.size > obs.x + 5 &&
+                player.y < obs.y + obs.height - 5 &&
+                player.y + player.size > obs.y + 5
+            ) {
+                gameOver();
+            }
+
+            // 画面外に出た障害物を削除
+            if (obs.x < -50) obstacles.splice(index, 1);
+        });
+    }
+
+    function gameOver() {
+        gameActive = false;
+        msgEl.style.display = 'block';
+    }
+
+    function resetGame() {
+        player.y = 250;
+        player.vy = 0;
+        player.rotation = 0;
+        obstacles = [];
+        score = 0;
+        level = 1;
+        speed = 5;
+        gameActive = true;
+        msgEl.style.display = 'none';
+        loop();
+    }
+
+    function loop() {
+        if (!gameActive) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 重力計算
+        player.vy += gravity;
+        player.y += player.vy;
+
+        // 地面判定
+        if (player.y > 270 - player.size) {
+            player.y = 270 - player.size;
+            player.vy = 0;
+            player.isGrounded = true;
+        }
+
+        // 難易度上昇
+        score++;
+        if (score % 500 === 0) {
+            level++;
+            speed += 0.8;
+        }
+
+        spawnObstacle();
+        drawObstacles();
+        drawPlayer();
+
+        scoreEl.innerText = score;
+        lvEl.innerText = level;
+
+        frameCount++;
+        requestAnimationFrame(loop);
+    }
+
+    loop();
+</script>
+</body>
+</html>
